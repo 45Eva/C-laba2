@@ -17,6 +17,41 @@ KEYS = {
     20: "нетянеушладомойкотик"
 }
 
+LETTER_FREQUENCES = {
+    'а': 0.0697201,
+    'б': 0.0172286,
+    'в': 0.056724,
+    'г': 0.0213469,
+    'д': 0.0324454,
+    'е': 0.0858417,
+    'ж': 0.00986348,
+    'з': 0.0162057,
+    'и': 0.0879848,
+    'й': 0.0114292,
+    'к': 0.0311624,
+    'л': 0.0499457,
+    'м': 0.0361014,
+    'н': 0.0651102,
+    'о': 0.104177,
+    'п': 0.0195504,
+    'р': 0.0443487,
+    'с': 0.0633102,
+    'т': 0.0510155,
+    'у': 0.0256018,
+    'ф': 0.000955243,
+    'х': 0.0115707,
+    'ц': 0.00528456,
+    'ч': 0.00954003,
+    'ш': 0.00566461,
+    'щ': 0.00225927,
+    'ъ': 0.000411046,
+    'ы': 0.0182337,
+    'ь': 0.0155054,
+    'э': 0.000103772,
+    'ю': 0.00895783,
+    'я': 0.0224008
+}
+
 
 # Функція для шифрування тексту
 def vigenere_encrypt(plaintext, key):
@@ -58,43 +93,47 @@ def calculate_index_of_coincidence(text):
 
 
 # Функція для знаходження довжини ключа
-def find_key_length(ciphertext):
-    estimated_key_lengths = []
-    for r in range(2, 21):  # Перевіримо довжини ключа від 2 до 20
-        blocks = [''.join(ciphertext[i::r]) for i in range(r)]
-        ic_values = [calculate_index_of_coincidence(block) for block in blocks]
-        avg_ic = sum(ic_values) / r
-        if avg_ic > 0.055:  # Порогове значення для вибору довжини ключа
-            estimated_key_lengths.append((r, avg_ic))
-
-    # Додатковий алгоритм для великих значень r
-    for r in range(2, 21):
-        blocks = [''.join(ciphertext[i::r]) for i in range(r)]
-        ic_values = [calculate_index_of_coincidence(block) for block in blocks]
-        avg_ic = sum(ic_values) / r
-        if abs(avg_ic - 1 / ALPHABET_SIZE) > 0.01:  # Теоретичне значення I для даної мови
-            estimated_key_lengths.append((r, avg_ic))
-
-    if estimated_key_lengths:
-        best_guess = max(estimated_key_lengths, key=lambda x: x[1])
-        return best_guess[0], estimated_key_lengths
-    return None, []
+def find_key_length(ciphertext, maxKeyLength=20):
+    possible_candidates = {}
+    for r in range(2, maxKeyLength):
+        d = 0
+        for i in range(len(ciphertext) - r):
+            d += ciphertext[i] == ciphertext[i + r]
+        possible_candidates[r] = d
+    result = max(possible_candidates, key=possible_candidates.get)
+    return result, possible_candidates
 
 
 # Функція для знаходження ключа
 def find_key(ciphertext, key_length):
     blocks = [''.join(ciphertext[i::key_length]) for i in range(key_length)]
     key = ''
+    most_frequent_in_lang = MOST_FREQUENT_LETTERS[0]
     for block in blocks:
         freq = {char: block.count(char) for char in ALPHABET}
         most_frequent_in_block = max(freq, key=freq.get)
-        for letter in MOST_FREQUENT_LETTERS:
-            key_char_index = (ALPHABET.index(most_frequent_in_block) - ALPHABET.index(letter)) % ALPHABET_SIZE
-            potential_key_char = ALPHABET[key_char_index]
-            if potential_key_char in ALPHABET:
-                key += potential_key_char
-                break
+
+        key += ALPHABET[
+            (ALPHABET.index(most_frequent_in_block) - ALPHABET.index(most_frequent_in_lang)) % ALPHABET_SIZE]
+
     return key
+
+
+def find_key_exact(ciphertext, key_length):
+    blocks = [''.join(ciphertext[i::key_length]) for i in range(key_length)]
+    res_key = ""
+    for block in blocks:
+        m_list = {}
+        for g in ALPHABET:
+            m_g = 0
+            for t in ALPHABET:
+                freq = {char: block.count(char) for char in ALPHABET}
+                m_g += LETTER_FREQUENCES[t] * freq[ALPHABET[(ALPHABET.index(t) + ALPHABET.index(g)) % ALPHABET_SIZE]]
+            m_list[g] = m_g
+
+        res_key += max(m_list, key=m_list.get)
+
+    return res_key
 
 
 # Функція для читання тексту з файлу
@@ -134,12 +173,15 @@ def main():
 
     elif action == '2':
         ciphertext = read_file(input_filename)
+        ciphertext = ciphertext.replace('\n', '')
         key_length, estimated_key_lengths = find_key_length(ciphertext)
         if key_length:
             print(f"Знайдені довжини ключів та їхні індекси відповідності: {estimated_key_lengths}")
-            key = find_key(ciphertext, key_length)
             print(f"Знайдена довжина ключа: {key_length}")
-            print(f"Знайдений ключ: {key}")
+            key = find_key(ciphertext, key_length)
+            print(f"Знайдений ключ першим способом: {key}")
+            key = find_key_exact(ciphertext, key_length)
+            print(f"Знайдений ключ другим способом: {key}")
             decrypted_text = vigenere_decrypt(ciphertext, key)
             write_file("R.txt", decrypted_text)
             print(f"Текст розшифровано. Ключ: {key}. Результат записано у файл R.txt.")
